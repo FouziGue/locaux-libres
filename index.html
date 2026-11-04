@@ -96,7 +96,7 @@
     <div id="summary" class="summary"></div>
     <div id="axis" class="axis"></div>
     <div id="list"></div>
-    <div class="hint">Barre de la journée : vert = libre, rouge = cours (survole un bloc pour le détail). Trait bleu = l'heure choisie.</div>
+    <div class="hint">Barre de la journée : vert = libre, rouge = cours (survole un bloc pour le détail). Trait bleu = l'heure choisie. <span id="freshness"></span></div>
   </section>
 </main>
 <div id="tip"></div>
@@ -201,13 +201,32 @@ function expand(ev) {
 }
 
 /* ---------- chargement ---------- */
+// data/all.json : calendriers pré-téléchargés par GitHub Actions (marche sur tous les réseaux,
+// y compris le wifi ECAM où calendar.ecam.be pointe vers une adresse interne bloquée par le navigateur).
+let snapshot = null;
+function loadSnapshot(force) {
+  if (!snapshot || force) {
+    snapshot = fetch('data/all.json', { cache: 'no-cache' })
+      .then(r => (r.ok ? r.json() : null))
+      .catch(() => null);
+  }
+  return snapshot;
+}
+
+function fromText(t) {
+  if (!t || !t.includes('BEGIN:VCALENDAR')) return { error: 'Local introuvable' };
+  return { events: parseICS(t) };
+}
+
 function load(room, force) {
   if (!force && cache[room]) return cache[room];
-  const p = fetch(ICS_BASE + encodeURIComponent(room), { cache: 'no-store' })
-    .then(r => r.text())
-    .then(t => {
-      if (!t.includes('BEGIN:VCALENDAR')) return { error: 'Local introuvable' };
-      return { events: parseICS(t) };
+  const p = loadSnapshot(force)
+    .then(snap => {
+      if (snap && room in snap.rooms) return fromText(snap.rooms[room]);
+      // local ajouté à la main : téléchargement direct
+      return fetch(ICS_BASE + encodeURIComponent(room), { cache: 'no-store' })
+        .then(r => r.text())
+        .then(fromText);
     })
     .catch(() => ({ error: 'Erreur réseau' }))
     .then(res => (cache[room] = res));
@@ -315,8 +334,7 @@ async function render() {
     summaryEl.textContent = '';
     listEl.innerHTML = `<p><b>Impossible de joindre calendar.ecam.be.</b></p>
       <p class="muted">Vérifie ta connexion internet, puis clique sur « Actualiser ».
-      Si tu vois cette page dans l'aperçu de Claude ou dans une visionneuse, ouvre-la plutôt avec
-      <b>lancer.bat</b> ou directement dans Chrome / Edge.</p>`;
+      Le plus simple : ouvre <b>https://fouzigue.github.io/locaux-libres/</b>.</p>`;
     document.getElementById('axis').innerHTML = '';
     return;
   }
@@ -325,6 +343,10 @@ async function render() {
   const when = useNow ? 'maintenant' : `le ${t.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })} à ${hhmm(t)}`;
   summaryEl.textContent = `${nFree} ${nFree > 1 ? 'locaux libres' : 'local libre'} sur ${rows.length} — ${when}` +
     (hiddenLabs ? ` (${hiddenLabs} labos masqués)` : '');
+  const snap = await loadSnapshot();
+  document.getElementById('freshness').textContent = snap
+    ? `Horaires ECAM mis à jour le ${new Date(snap.generated).toLocaleString('fr-BE', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}.`
+    : '';
 
   listEl.innerHTML = '';
   let lastGroup = null;
@@ -412,7 +434,11 @@ document.getElementById('resetBtn').onclick = () => {
   rooms = [...DEFAULT_ROOMS]; labs = new Set(DEFAULT_LABS);
   saveRooms(); renderChips(); render();
 };
-document.getElementById('refreshBtn').onclick = () => { rooms.forEach(r => load(r, true)); render(); };
+document.getElementById('refreshBtn').onclick = () => {
+  loadSnapshot(true);
+  for (const r of Object.keys(cache)) delete cache[r];
+  render();
+};
 
 listEl.addEventListener('mousemove', e => {
   const b = e.target.closest('.b');
