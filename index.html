@@ -1,0 +1,436 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Locaux libres ECAM</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #6b7280; --line: #e3e6eb;
+    --free: #16a34a; --free-bg: #dcfce7; --busy: #dc2626; --busy-bg: #fee2e2;
+    --block: #f87171; --accent: #2563eb; --now: #2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #181b21; --text: #e8eaee; --muted: #9aa1ad; --line: #2a2f38;
+      --free: #4ade80; --free-bg: #14361f; --busy: #f87171; --busy-bg: #3d1717;
+      --block: #b91c1c; --accent: #60a5fa; --now: #60a5fa;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+  main { max-width: 900px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  input, button { font: inherit; color: inherit; }
+  input[type=text], input[type=date], input[type=time] {
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px;
+  }
+  input[type=text] { flex: 1; min-width: 160px; }
+  button { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg); border: 1px solid var(--line); border-radius: 999px; padding: 3px 4px 3px 10px; font-weight: 600; }
+  .chip button { border: 0; padding: 0 7px; border-radius: 999px; line-height: 1.5; color: var(--muted); }
+  .label { color: var(--muted); font-size: .85rem; margin-right: 4px; }
+  .summary { font-weight: 600; margin: 4px 0 12px; }
+  .room { display: grid; grid-template-columns: 70px 1fr; gap: 6px 12px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .room:first-child { border-top: 0; }
+  .name { font-weight: 700; font-size: 1.05rem; }
+  .status { display: inline-block; font-weight: 600; font-size: .85rem; border-radius: 6px; padding: 2px 8px; }
+  .status.free { background: var(--free-bg); color: var(--free); }
+  .status.busy { background: var(--busy-bg); color: var(--busy); }
+  .status.err { background: var(--bg); color: var(--muted); }
+  .detail { color: var(--muted); font-size: .88rem; margin-left: 6px; }
+  .tl { grid-column: 2; position: relative; height: 22px; background: var(--free-bg); border-radius: 5px; overflow: hidden; }
+  .tl .b { position: absolute; top: 0; bottom: 0; background: var(--block); opacity: .85; border-left: 1px solid var(--card); }
+  .tl .n { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--now); }
+  .axis { position: relative; height: 16px; margin-left: 82px; font-size: .72rem; color: var(--muted); }
+  .axis span { position: absolute; transform: translateX(-50%); }
+  .muted { color: var(--muted); }
+  details > summary { cursor: pointer; }
+  .check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .check input { width: 17px; height: 17px; accent-color: var(--accent); }
+  .tag { display: inline-block; font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; margin-left: 4px; vertical-align: middle; }
+  .chip.lab { border-style: dashed; }
+  .chip .nm { cursor: pointer; }
+  .group { font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 14px 0 2px; }
+  .group:first-child { margin-top: 0; }
+  .room .name .tag { display: block; width: fit-content; margin: 2px 0 0; }
+  .hint { font-size: .82rem; color: var(--muted); margin-top: 8px; }
+  #tip { position: fixed; pointer-events: none; background: var(--text); color: var(--bg); font-size: .8rem; padding: 6px 8px; border-radius: 6px; max-width: 280px; display: none; z-index: 10; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Locaux libres</h1>
+  <p class="sub">D'après les calendriers ECAM (calendar.ecam.be/ics/&lt;local&gt;)</p>
+
+  <details class="card">
+    <summary><b>Gérer mes locaux</b> <span id="roomCount" class="muted"></span></summary>
+    <form id="addForm" class="row" style="margin-top:10px">
+      <input id="roomInput" type="text" placeholder="Ajouter un ou plusieurs locaux (ex : 2F10, 1E04)" autocomplete="off">
+      <button class="primary" type="submit">Ajouter</button>
+    </form>
+    <div id="chips" class="chips"></div>
+    <div class="hint">Clique sur le nom d'un local pour le marquer (ou non) comme laboratoire. × pour le retirer. <button id="resetBtn" type="button" style="padding:2px 8px;font-size:.8rem">Liste par défaut</button></div>
+  </details>
+
+  <section class="card">
+    <div class="row">
+      <button id="nowBtn" class="on" type="button">Maintenant</button>
+      <span class="label">ou le</span>
+      <input id="dateInput" type="date">
+      <span class="label">à</span>
+      <input id="timeInput" type="time" step="900">
+      <span style="flex:1"></span>
+      <label class="check"><input id="labsBox" type="checkbox"> Laboratoires inclus</label>
+      <button id="refreshBtn" type="button" title="Recharger les calendriers">↻ Actualiser</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <div id="summary" class="summary"></div>
+    <div id="axis" class="axis"></div>
+    <div id="list"></div>
+    <div class="hint">Barre de la journée : vert = libre, rouge = cours (survole un bloc pour le détail). Trait bleu = l'heure choisie.</div>
+  </section>
+</main>
+<div id="tip"></div>
+
+<script>
+const ICS_BASE = 'https://calendar.ecam.be/ics/';
+const STORE_KEY = 'ecam-locaux-v2';
+const DAY_START = 8, DAY_END = 19;
+
+const DEFAULT_ROOMS = ['1D01','1D02','1D04','1D05','1E01','1E02','1E04','1F01','1F02','1F03','1F04','1G01','1G06',
+  '2D15','2D20','2D22','2D23','2D24','2D25','2D44','2D50','2D52','2E14','2E35','2E36','2E37','2E43','2E44','2E51',
+  '2F10','2F20','2F23','2F27','2F28','2F36','2F50','2F51','2C02','2C05','2C06'];
+// Laboratoires : locaux dont ≥ 40 % des activités au calendrier sont des labos
+const DEFAULT_LABS = ['1F04','2C02','2C05','2C06','2D20','2D22','2D23','2D24','2D25','2D44','2D50','2E36','2E37','2F20','2F23','2F28'];
+const NOTES = { '1G06': 'polyvalente' };
+
+let { rooms, labs, withLabs } = loadState();
+let useNow = true;
+const cache = {}; // room -> {events, error} | Promise
+
+/* ---------- stockage ---------- */
+function loadState() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (s && Array.isArray(s.rooms)) return { rooms: s.rooms, labs: new Set(s.labs || []), withLabs: !!s.withLabs };
+  } catch {}
+  return { rooms: [...DEFAULT_ROOMS], labs: new Set(DEFAULT_LABS), withLabs: false };
+}
+function saveRooms() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ rooms, labs: [...labs], withLabs })); } catch {}
+}
+
+/* ---------- parsing ICS ---------- */
+function parseDate(v) {
+  const m = v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/);
+  if (!m) return null;
+  const [, y, mo, d, h = 0, mi = 0, s = 0, z] = m;
+  return z ? new Date(Date.UTC(+y, mo - 1, +d, +h, +mi, +s)) : new Date(+y, mo - 1, +d, +h, +mi, +s);
+}
+function unescapeText(s) { return s.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1'); }
+
+function parseICS(text) {
+  const lines = text.replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').split(/\r?\n/);
+  const events = [];
+  let ev = null;
+  for (const line of lines) {
+    if (line === 'BEGIN:VEVENT') { ev = { exdates: [] }; continue; }
+    if (line === 'END:VEVENT') { if (ev && ev.start) events.push(...expand(ev)); ev = null; continue; }
+    if (!ev) continue;
+    const i = line.indexOf(':');
+    if (i < 0) continue;
+    const name = line.slice(0, i).split(';')[0].toUpperCase();
+    const val = line.slice(i + 1);
+    if (name === 'DTSTART') ev.start = parseDate(val);
+    else if (name === 'DTEND') ev.end = parseDate(val);
+    else if (name === 'SUMMARY') ev.summary = unescapeText(val);
+    else if (name === 'DESCRIPTION') ev.desc = unescapeText(val);
+    else if (name === 'RRULE') ev.rrule = Object.fromEntries(val.split(';').map(p => p.split('=')));
+    else if (name === 'EXDATE') val.split(',').forEach(x => { const d = parseDate(x); if (d) ev.exdates.push(d.getTime()); });
+  }
+  return events.sort((a, b) => a.start - b.start);
+}
+
+function info(ev) {
+  const get = k => { const m = (ev.desc || '').match(new RegExp('^' + k + ':(.*)$', 'm')); return m ? m[1].trim() : ''; };
+  return { title: get('Act') || ev.summary || 'Occupé', group: get('Groupe'), prof: get('Ens'), code: ev.summary || '' };
+}
+
+const DAYS = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
+function shift(date, days) { const d = new Date(date); d.setDate(d.getDate() + days); return d; }
+
+function expand(ev) {
+  const end = ev.end || new Date(ev.start.getTime() + 3600e3);
+  const dur = end - ev.start;
+  const base = info(ev);
+  const mk = s => ({ ...base, start: s, end: new Date(s.getTime() + dur) });
+  const r = ev.rrule;
+  if (!r || !['WEEKLY', 'DAILY'].includes(r.FREQ)) return [mk(ev.start)];
+
+  const interval = +(r.INTERVAL || 1);
+  const count = r.COUNT ? +r.COUNT : Infinity;
+  const until = r.UNTIL ? parseDate(r.UNTIL) : shift(ev.start, 400);
+  const out = [];
+  let n = 0;
+  const push = s => { if (n >= count || s > until) return false; n++; if (!ev.exdates.includes(s.getTime())) out.push(mk(s)); return true; };
+
+  if (r.FREQ === 'DAILY') {
+    for (let k = 0; push(shift(ev.start, k * interval)); k++);
+  } else {
+    const byday = (r.BYDAY ? r.BYDAY.split(',').map(d => DAYS[d.slice(-2)]) : [ev.start.getDay()]).sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7));
+    const monday = shift(ev.start, -((ev.start.getDay() + 6) % 7));
+    outer: for (let w = 0; w < 120; w++) {
+      for (const d of byday) {
+        const s = shift(monday, w * 7 * interval + ((d + 6) % 7));
+        s.setHours(ev.start.getHours(), ev.start.getMinutes(), ev.start.getSeconds());
+        if (s < ev.start) continue;
+        if (!push(s)) break outer;
+      }
+    }
+  }
+  return out;
+}
+
+/* ---------- chargement ---------- */
+function load(room, force) {
+  if (!force && cache[room]) return cache[room];
+  const p = fetch(ICS_BASE + encodeURIComponent(room), { cache: 'no-store' })
+    .then(r => r.text())
+    .then(t => {
+      if (!t.includes('BEGIN:VCALENDAR')) return { error: 'Local introuvable' };
+      return { events: parseICS(t) };
+    })
+    .catch(() => ({ error: 'Erreur réseau' }))
+    .then(res => (cache[room] = res));
+  cache[room] = p;
+  return p;
+}
+
+/* ---------- calculs ---------- */
+function targetTime() {
+  if (useNow) return new Date();
+  const [y, m, d] = (dateInput.value || isoDate(new Date())).split('-').map(Number);
+  const [h, mi] = (timeInput.value || '08:30').split(':').map(Number);
+  return new Date(y, m - 1, d, h, mi);
+}
+function isoDate(d) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function hhmm(d) { return d.toLocaleTimeString('fr-BE', { hour: '2-digit', minute: '2-digit' }); }
+function sameDay(a, b) { return a.toDateString() === b.toDateString(); }
+function dur(ms) {
+  const m = Math.round(ms / 60000);
+  return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}` : `${m} min`;
+}
+
+function status(events, t) {
+  const dayEnd = new Date(t); dayEnd.setHours(23, 59, 59);
+  const today = events.filter(e => e.end > t && e.start <= dayEnd);
+  const cur = today.find(e => e.start <= t && e.end > t);
+  if (cur) {
+    // fin de l'occupation continue (cours enchaînés à moins de 20 min d'écart)
+    let until = cur.end;
+    for (const e of today) if (e.start > cur.start && e.start - until <= 20 * 60e3 && e.end > until) until = e.end;
+    return { free: false, ev: cur, until };
+  }
+  const next = today.find(e => e.start > t);
+  return { free: true, next, freeMs: (next ? next.start : dayEnd) - t };
+}
+
+/* ---------- rendu ---------- */
+const listEl = document.getElementById('list');
+const summaryEl = document.getElementById('summary');
+const tip = document.getElementById('tip');
+let renderToken = 0;
+
+function renderChips() {
+  const el = document.getElementById('chips');
+  el.innerHTML = '';
+  document.getElementById('roomCount').textContent = `(${rooms.length} locaux dont ${rooms.filter(r => labs.has(r)).length} labos)`;
+  rooms.forEach(r => {
+    const c = document.createElement('span');
+    c.className = 'chip' + (labs.has(r) ? ' lab' : '');
+    const nm = document.createElement('span');
+    nm.className = 'nm';
+    nm.textContent = r;
+    nm.title = labs.has(r) ? 'Laboratoire — cliquer pour en faire un local normal' : 'Cliquer pour marquer comme laboratoire';
+    if (labs.has(r)) nm.innerHTML += '<span class="tag">labo</span>';
+    nm.onclick = () => { labs.has(r) ? labs.delete(r) : labs.add(r); saveRooms(); renderChips(); render(); };
+    c.appendChild(nm);
+    const x = document.createElement('button');
+    x.type = 'button'; x.textContent = '×'; x.title = 'Retirer ' + r;
+    x.onclick = () => { rooms = rooms.filter(z => z !== r); saveRooms(); renderChips(); render(); };
+    c.appendChild(x);
+    el.appendChild(c);
+  });
+}
+
+function renderAxis(span) {
+  const el = document.getElementById('axis');
+  el.innerHTML = '';
+  for (let h = span[0]; h <= span[1]; h += 2) {
+    const s = document.createElement('span');
+    s.style.left = ((h - span[0]) / (span[1] - span[0]) * 100) + '%';
+    s.textContent = h + 'h';
+    el.appendChild(s);
+  }
+}
+
+async function render() {
+  const token = ++renderToken;
+  const t = targetTime();
+  if (!rooms.length) { listEl.innerHTML = '<p class="muted">Ajoute des locaux pour commencer.</p>'; summaryEl.textContent = ''; return; }
+  summaryEl.textContent = 'Chargement…';
+
+  const shown = rooms.filter(r => withLabs || !labs.has(r));
+  const results = await Promise.all(shown.map(r => load(r)));
+  if (token !== renderToken) return;
+
+  // plage horaire de la journée
+  let span = [DAY_START, DAY_END];
+  results.forEach(res => (res.events || []).forEach(e => {
+    if (sameDay(e.start, t)) { span[0] = Math.min(span[0], e.start.getHours()); span[1] = Math.max(span[1], e.end.getHours() + (e.end.getMinutes() ? 1 : 0)); }
+  }));
+  if (span[1] - span[0] < 2) span[1] = span[0] + 2;
+  renderAxis(span);
+
+  const rows = shown.map((room, i) => {
+    const res = results[i];
+    return { room, res, st: res.events ? status(res.events, t) : null };
+  });
+  const hiddenLabs = rooms.length - shown.length;
+  rows.sort((a, b) => {
+    const score = r => !r.st ? -Infinity : r.st.free ? r.st.freeMs : -(r.st.until - t);
+    return score(b) - score(a);
+  });
+
+  if (rows.length && rows.every(r => r.res.error === 'Erreur réseau')) {
+    summaryEl.textContent = '';
+    listEl.innerHTML = `<p><b>Impossible de joindre calendar.ecam.be.</b></p>
+      <p class="muted">Vérifie ta connexion internet, puis clique sur « Actualiser ».
+      Si tu vois cette page dans l'aperçu de Claude ou dans une visionneuse, ouvre-la plutôt avec
+      <b>lancer.bat</b> ou directement dans Chrome / Edge.</p>`;
+    document.getElementById('axis').innerHTML = '';
+    return;
+  }
+
+  const nFree = rows.filter(r => r.st && r.st.free).length;
+  const when = useNow ? 'maintenant' : `le ${t.toLocaleDateString('fr-BE', { weekday: 'long', day: 'numeric', month: 'long' })} à ${hhmm(t)}`;
+  summaryEl.textContent = `${nFree} ${nFree > 1 ? 'locaux libres' : 'local libre'} sur ${rows.length} — ${when}` +
+    (hiddenLabs ? ` (${hiddenLabs} labos masqués)` : '');
+
+  listEl.innerHTML = '';
+  let lastGroup = null;
+  const dayStart = new Date(t); dayStart.setHours(span[0], 0, 0, 0);
+  const spanMs = (span[1] - span[0]) * 3600e3;
+  const pct = d => Math.max(0, Math.min(100, (d - dayStart) / spanMs * 100));
+
+  for (const { room, res, st } of rows) {
+    const group = !st ? 'Indisponibles' : st.free ? 'Libres' : 'Occupés';
+    if (group !== lastGroup) {
+      const g = document.createElement('div');
+      g.className = 'group'; g.textContent = group;
+      listEl.appendChild(g);
+      lastGroup = group;
+    }
+    const row = document.createElement('div');
+    row.className = 'room';
+    const name = document.createElement('div');
+    name.className = 'name'; name.textContent = room;
+    const tagText = labs.has(room) ? 'labo' : NOTES[room];
+    if (tagText) name.innerHTML += `<span class="tag">${tagText}</span>`;
+    const line = document.createElement('div');
+    const badge = document.createElement('span');
+    const detail = document.createElement('span');
+    detail.className = 'detail';
+
+    if (!st) {
+      badge.className = 'status err'; badge.textContent = res.error;
+    } else if (st.free) {
+      badge.className = 'status free'; badge.textContent = 'Libre';
+      detail.textContent = st.next ? `jusqu'à ${hhmm(st.next.start)} (${dur(st.freeMs)}) · ensuite : ${st.next.title}` : 'pour le reste de la journée';
+    } else {
+      badge.className = 'status busy'; badge.textContent = 'Occupé';
+      detail.textContent = `jusqu'à ${hhmm(st.until)} · ${st.ev.title}${st.ev.group ? ' (' + st.ev.group + ')' : ''}`;
+    }
+    line.append(badge, detail);
+
+    const tl = document.createElement('div');
+    tl.className = 'tl';
+    if (res.events) {
+      res.events.filter(e => sameDay(e.start, t)).forEach(e => {
+        const b = document.createElement('div');
+        b.className = 'b';
+        b.style.left = pct(e.start) + '%';
+        b.style.width = (pct(e.end) - pct(e.start)) + '%';
+        b.dataset.tip = `${hhmm(e.start)}–${hhmm(e.end)}\n${e.title}\n${[e.group, e.prof].filter(Boolean).join(' · ')}`;
+        tl.appendChild(b);
+      });
+      const n = document.createElement('div');
+      n.className = 'n'; n.style.left = pct(t) + '%';
+      tl.appendChild(n);
+    }
+    row.append(name, line);
+    if (res.events) row.append(document.createElement('div'), tl);
+    listEl.appendChild(row);
+  }
+}
+
+/* ---------- interactions ---------- */
+const dateInput = document.getElementById('dateInput');
+const timeInput = document.getElementById('timeInput');
+const nowBtn = document.getElementById('nowBtn');
+
+function setNow(on) {
+  useNow = on;
+  nowBtn.classList.toggle('on', on);
+  if (on) { const n = new Date(); dateInput.value = isoDate(n); timeInput.value = hhmm(n); }
+  render();
+}
+nowBtn.onclick = () => setNow(true);
+dateInput.onchange = timeInput.onchange = () => { useNow = false; nowBtn.classList.remove('on'); render(); };
+
+document.getElementById('addForm').onsubmit = e => {
+  e.preventDefault();
+  const inp = document.getElementById('roomInput');
+  const added = inp.value.split(/[\s,;]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+  for (const r of added) if (!rooms.includes(r)) rooms.push(r);
+  inp.value = '';
+  saveRooms(); renderChips(); render();
+};
+const labsBox = document.getElementById('labsBox');
+labsBox.checked = withLabs;
+labsBox.onchange = () => { withLabs = labsBox.checked; saveRooms(); render(); };
+document.getElementById('resetBtn').onclick = () => {
+  rooms = [...DEFAULT_ROOMS]; labs = new Set(DEFAULT_LABS);
+  saveRooms(); renderChips(); render();
+};
+document.getElementById('refreshBtn').onclick = () => { rooms.forEach(r => load(r, true)); render(); };
+
+listEl.addEventListener('mousemove', e => {
+  const b = e.target.closest('.b');
+  if (!b) { tip.style.display = 'none'; return; }
+  tip.style.display = 'block';
+  tip.innerText = b.dataset.tip;
+  tip.style.left = Math.min(e.clientX + 12, innerWidth - 290) + 'px';
+  tip.style.top = (e.clientY + 14) + 'px';
+});
+listEl.addEventListener('mouseleave', () => tip.style.display = 'none');
+listEl.addEventListener('click', e => {
+  const b = e.target.closest('.b');
+  if (b && matchMedia('(hover: none)').matches) alert(b.dataset.tip);
+});
+
+setInterval(() => { if (useNow) render(); }, 60e3);
+renderChips();
+setNow(true);
+</script>
+</body>
+</html>
