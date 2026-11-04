@@ -109,8 +109,10 @@ const DAY_START = 8, DAY_END = 19;
 const DEFAULT_ROOMS = ['1D01','1D02','1D04','1D05','1E01','1E02','1E04','1F01','1F02','1F03','1F04','1G01','1G06',
   '2D15','2D20','2D22','2D23','2D24','2D25','2D44','2D50','2D52','2E14','2E35','2E36','2E37','2E43','2E44','2E51',
   '2F10','2F20','2F23','2F27','2F28','2F36','2F50','2F51','2C02','2C05','2C06'];
-// Laboratoires : locaux dont ≥ 40 % des activités au calendrier sont des labos
-const DEFAULT_LABS = ['1F04','2C02','2C05','2C06','2D20','2D22','2D23','2D24','2D25','2D44','2D50','2E36','2E37','2F20','2F23','2F28'];
+// Laboratoires : locaux dont ≥ 40 % des activités sont des labos, + ceux indiqués à la main
+const DEFAULT_LABS = ['1F03','1F04','2C02','2C05','2C06','2D20','2D22','2D23','2D24','2D25','2D44','2D50',
+  '2E35','2E36','2E37','2E43','2F20','2F23','2F27','2F28','2F36'];
+const LABS_VERSION = 2; // à incrémenter quand DEFAULT_LABS change
 const NOTES = { '1G06': 'polyvalente' };
 
 let { rooms, labs, withLabs } = loadState();
@@ -121,12 +123,15 @@ const cache = {}; // room -> {events, error} | Promise
 function loadState() {
   try {
     const s = JSON.parse(localStorage.getItem(STORE_KEY));
-    if (s && Array.isArray(s.rooms)) return { rooms: s.rooms, labs: new Set(s.labs || []), withLabs: !!s.withLabs };
+    if (s && Array.isArray(s.rooms)) {
+      const labs = s.labsVersion === LABS_VERSION ? s.labs || [] : DEFAULT_LABS; // nouvelle liste de labos → on la reprend
+      return { rooms: s.rooms, labs: new Set(labs), withLabs: !!s.withLabs };
+    }
   } catch {}
   return { rooms: [...DEFAULT_ROOMS], labs: new Set(DEFAULT_LABS), withLabs: false };
 }
 function saveRooms() {
-  try { localStorage.setItem(STORE_KEY, JSON.stringify({ rooms, labs: [...labs], withLabs })); } catch {}
+  try { localStorage.setItem(STORE_KEY, JSON.stringify({ rooms, labs: [...labs], labsVersion: LABS_VERSION, withLabs })); } catch {}
 }
 
 /* ---------- parsing ICS ---------- */
